@@ -10,9 +10,12 @@
 'use strict';
 const params=new URLSearchParams(location.search);
 const nonce=params.get('nonce')||'';
+const isPicker=params.get('mode')==='picker';
+const expectedLoc=params.get('expectedLoc')||'';
+const expectedSku=params.get('expectedSku')||'';
 const statusEl=document.getElementById('status');
 const last=document.getElementById('last');
-const scanGuidance=document.createElement('div');scanGuidance.id='scan-guidance';scanGuidance.className='card';scanGuidance.textContent='ขั้นตอนที่ 1: สแกนป้าย Location';document.querySelector('.wrap header').insertAdjacentElement('afterend',scanGuidance);
+const scanGuidance=document.createElement('div');scanGuidance.id='scan-guidance';scanGuidance.className='card';scanGuidance.textContent=isPicker?'ขั้นตอนที่ 1: สแกน Location '+expectedLoc+' → จากนั้นสแกนสินค้า '+expectedSku:'สแกน Barcode หรือ QR Code';document.querySelector('.wrap header').insertAdjacentElement('afterend',scanGuidance);
 let scanner=null,started=false,working=false,lastText='',lastAt=0;
 function status(text,bad=false){statusEl.textContent=text;statusEl.className='msg '+(bad?'error':'');}
 function forward(value){
@@ -57,7 +60,7 @@ document.getElementById('close').onclick=()=>window.close();
 window.addEventListener('message',ev=>{
   if(ev.source!==window.opener || !ev.data || ev.data.type!=='OMP_WMS_PICKER_FEEDBACK' || ev.data.nonce!==nonce)return;
   const d=ev.data;
-  scanGuidance.textContent=(d.step===2?'ขั้นตอนที่ 2: สแกน Barcode สินค้า':'ขั้นตอนที่ 1: สแกน Location');
+  scanGuidance.textContent=(d.step===2?'ขั้นตอนที่ 2: สแกน Barcode สินค้า '+expectedSku:'ขั้นตอนที่ 1: สแกน Location '+expectedLoc);
   scanGuidance.style.border='2px solid '+(d.ok?'#16a34a':'#dc2626');
   last.textContent=String(d.message||'');
   last.className='msg '+(d.ok?'ok':'error');
