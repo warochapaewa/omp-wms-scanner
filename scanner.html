@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OMP WMS · External Scanner</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>body{font-family:system-ui,'Segoe UI',sans-serif;background:#f2f6fc;margin:0;color:#16304d}.wrap{max-width:500px;margin:22px auto;padding:16px}header{background:#082d5a;color:white;padding:17px;border-radius:12px;font-weight:700;font-size:20px}.card{background:#fff;padding:18px;border-radius:12px;margin-top:14px;box-shadow:0 2px 9px #0001}#reader{width:100%;min-height:200px}button{padding:12px 16px;border:0;border-radius:8px;background:#0862b2;color:white;font-weight:600;cursor:pointer}input{max-width:100%}.msg{margin:10px 0;word-wrap:break-word}.error{color:#b91c1c}.ok{color:#067647}.muted{color:#64748b;font-size:13px}</style></head>
+<body><div class="wrap"><header>📷 OMP WMS · Scanner</header><div class="card"><div id="status" class="msg">กำลังเตรียมกล้อง...</div><div id="reader"></div><div class="msg muted">เปิดโดยตรงผ่าน HTTPS • อนุญาตกล้องเมื่อ Chrome ถาม • สำหรับ Picker สแกน Location ก่อน ตามด้วยสินค้า</div></div>
+<div class="card"><label for="barcode-file"><b>สแกนจากภาพ (สำรอง)</b></label><p><input id="barcode-file" type="file" accept="image/*" capture="environment"></p><div class="muted">กรณีกล้องไม่พร้อม สามารถถ่ายภาพหรือเลือกรูป Barcode/QR ได้</div></div>
+<div class="card"><div id="last" class="msg"></div><button id="retry" type="button">ลองเปิดกล้องอีกครั้ง</button> <button id="close" type="button" style="background:#64748b">ปิดหน้าต่าง</button></div></div>
+<script>
+'use strict';
+const params=new URLSearchParams(location.search);
+const nonce=params.get('nonce')||'';
+const statusEl=document.getElementById('status');
+const last=document.getElementById('last');
+let scanner=null,started=false,working=false,lastText='',lastAt=0;
+function status(text,bad=false){statusEl.textContent=text;statusEl.className='msg '+(bad?'error':'');}
+function forward(value){
+  value=String(value||'').trim();if(!value||!nonce)return;
+  const now=Date.now();if(value===lastText && now-lastAt<1600)return;
+  lastText=value;lastAt=now;
+  last.textContent='อ่านได้: '+value;
+  last.className='msg ok';
+  if(window.opener && !window.opener.closed){
+    // The opener authenticates message origin, window source and nonce, then validates SKU/Location.
+    window.opener.postMessage({type:'OMP_WMS_SCAN_RESULT',nonce,value},'*');
+  }else{status('ไม่มีหน้าต่าง WMS ต้นทาง กรุณาเปิด Scanner จากปุ่มใน WMS',true)}
+}
+async function stop(){if(scanner && started){try{await scanner.stop()}catch(e){}started=false;}if(scanner){try{scanner.clear()}catch(e){}scanner=null}}
+async function start(){
+ if(working)return;working=true;
+ try{
+  await stop();
+  if(!window.isSecureContext)throw Error('ต้องเปิด Scanner ผ่าน HTTPS หรือ localhost');
+  if(!navigator.mediaDevices?.getUserMedia)throw Error('เบราว์เซอร์ไม่รองรับกล้องในหน้านี้');
+  if(!window.Html5Qrcode)throw Error('โหลดไลบรารี html5-qrcode ไม่สำเร็จ');
+  status('กำลังขอสิทธิ์กล้อง...');
+  scanner=new Html5Qrcode('reader');
+  await scanner.start({facingMode:'environment'}, {fps:10,qrbox:{width:250,height:180}},forward,()=>{});
+  started=true;status('กล้องพร้อมสแกน');
+ }catch(e){const msg=String(e?.message||e||'Unknown error');status('เปิดกล้องไม่ได้: '+msg,true);}
+ finally{working=false}
+}
+document.getElementById('barcode-file').addEventListener('change',async e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ try{
+  if(!window.Html5Qrcode)throw Error('ไม่พบไลบรารีสแกน');
+  // Release live camera before reading from file.
+  await stop();const qr=new Html5Qrcode('reader');scanner=qr;
+  const value=await qr.scanFile(file,true);forward(value);status('อ่านภาพสำเร็จ · สามารถเลือกรูปถัดไปได้');
+  qr.clear();scanner=null;
+ }catch(err){status('อ่านภาพไม่สำเร็จ: '+String(err?.message||err),true)}
+ e.target.value='';
+});
+document.getElementById('retry').onclick=start;
+document.getElementById('close').onclick=()=>window.close();
+window.addEventListener('pagehide',()=>{stop()});
+start();
+</script></body></html>
